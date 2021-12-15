@@ -22,8 +22,8 @@
 		"os": [
 			"buster"
 		],
-		"details": "Lorem ipsum",
-		"changelog": "Lorem ipsum"
+		"details": "GEVOL control plugin",
+		"changelog": ""
 	},
 	"engines": {
 		"node": ">=14.15.4 <15.0.0",
