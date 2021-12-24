@@ -13,7 +13,7 @@
 		"prettyName": "GEVOL",
 		"icon": "fa-lightbulb-o",
 		"plugin_type": "audio_interface",
-		"has_alsa_contribution":true,
+		"has_alsa_contribution":false,
 		"architectures": [
 			"amd64",
 			"armhf",

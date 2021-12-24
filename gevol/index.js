@@ -99,7 +99,16 @@ gevol.prototype.setConf = function(varName, varValue) {
 
 // Application Methods -----------------------------------------------------------------------------
 
-gevol.prototype.volumioupdatevolume = function (vol) {
+gevol.prototype.volumioupdatevolume = function (volume) {
 	var self = this;
-	self.logger.info('GEVOL volume: ' + vol.vol + " muted: " + vol.muted);
+	self.logger.info('[GEVOL] update volume: ' + volume.vol); // + " muted: " + vol.muted);
+	const cmdStr = 'curl -X "POST" -d volume=' + volume.vol + ' 127.0.0.1:81';
+	//self.logger.info(cmdStr);
+	exec(cmdStr, {uid: 1000, gid: 1000}, function (error, stdout, stderr) {
+		if (error !== null) {
+                  self.logger.error('[GEVOL] volumioupdatevolume: Error: ' + cmdStr + ' ' + error);
+                } else {
+                  self.logger.info('[GEVOL] volumioupdatevolume: ' + stdout);
+                }
+	});
 };
