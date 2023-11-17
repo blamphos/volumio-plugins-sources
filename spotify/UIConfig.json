@@ -3,54 +3,127 @@
     "label": "TRANSLATE.SPOTIFY_CONFIGURATION"
   },
   "sections": [
-   {
-      "id": "section_account",
-      "element": "section",
-      "label": "TRANSLATE.SPOTIFY",
+    {
+    "id": "section_spotify",
+    "type": "section",
+    "label": "Spotify",
       "icon": "fa-spotify",
-      "onSave": {"type":"controller", "endpoint":"music_service/spop", "method":"saveSpotifyAccount"},
+    "content": [
+      {
+        "id": "spotify_use",
+        "description": "TRANSLATE.OPEN_OR_INSTALL_SPOTIFY_DESCRIPTION",
+        "onClick": {"type":"openUrl", "url":"spotify://"}
+      }
+    ]
+  },
+    {
+    "id": "section_account",
+    "element": "section",
+    "label": "TRANSLATE.SPOTIFY_BROWSING",
+    "hidden": false,
+    "content": [
+      {
+        "id":"oauth",
+        "element": "button",
+        "label": "TRANSLATE.AUTHORIZE",
+        "description": "TRANSLATE.AUTHORIZE_PERSONAL_CONTENT",
+        "onClick": {"type":"oauth", "performerUrl":"http://oauth-performer.dfs.volumio.org/spotify","plugin":"music_service/spop", "scopes":[
+          "user-modify-playback-state",
+          "user-read-playback-state",
+          "user-read-currently-playing",
+          "user-top-read",
+          "user-read-recently-played",
+          "user-read-private",
+          "user-read-email",
+          "user-library-read",
+          "playlist-read-private",
+          "playlist-read-collaborative",
+          "app-remote-control",
+          "streaming",
+          "user-follow-read"
+        ]}
+      },
+      {
+        "id":"logout",
+        "element": "button",
+        "label": "TRANSLATE.LOGOUT",
+        "description": "TRANSLATE.LOGOUT",
+        "onClick": {"type":"emit", "message":"callMethod", "data":{"endpoint":"music_service/spop","method":"logout","data":""}},
+        "hidden": true
+      }
+    ]
+  },
+    {
+      "id": "spotify_settings",
+      "element": "section",
+      "onSave": {
+        "type": "controller",
+        "endpoint": "music_service/spop",
+        "method": "saveGoLibrespotSettings"
+      },
       "saveButton": {
-        "label": "TRANSLATE.LOGIN",
+        "label": "TRANSLATE.SAVE",
         "data": [
-          "username",
-          "password",
           "bitrate",
-	      "refresh_token"
+          "debug",
+          "icon"
         ]
       },
       "content": [
         {
-          "id": "username",
-          "type":"text",
-          "element": "input",
-          "doc": "This is the username of your Spotify account",
-          "label": "TRANSLATE.USERNAME",
-          "value": ""
+          "id": "bitrate",
+          "element": "select",
+          "doc": "Bitrate",
+          "label": "Bitrate",
+          "value": {
+            "value": 320,
+            "label": "320 kbps"
+          },
+          "options": [{
+            "value": 320,
+            "label": "320 kbps"
+          },
+            {
+              "value": 160,
+              "label": "160 kbps"
+            },
+            {
+              "value": 96,
+              "label": "96 kbps"
+            }
+          ]
         },
         {
-          "id": "password",
-          "type":"password",
-          "element": "input",
-          "doc": "This is the password of your Spotify account",
-          "label": "TRANSLATE.PASSWORD",
-          "value": ""
-        },
-        {
-          "id":"bitrate",
+          "id": "debug",
           "element": "switch",
-          "doc": "High bitrate",
-          "label": "TRANSLATE.HIGH_BITRATE",
-          "value": true,
+          "doc": "TRANSLATE.DESCDEBUG",
+          "label": "TRANSLATE.DEBUG",
+          "value": false,
           "hidden": true
         },
         {
-          "id":"oauth",
-          "element": "button",
-          "label": "TRANSLATE.AUTHORIZE",
-          "description": "TRANSLATE.AUTHORIZE_PERSONAL_CONTENT",
-          "onClick": {"type":"oauth", "performerUrl":"http://oauth-performer.dfs.volumio.org/spotify","plugin":"music_service/spop", "scopes":[]}
+          "id": "icon",
+          "element": "select",
+          "doc": "TRANSLATE.CONNECT_DEVICE_ICON_DOC",
+          "label": "TRANSLATE.CONNECT_DEVICE_ICON",
+          "value": {
+            "value": "avr",
+            "label": "AV Receiver"
+          },
+          "options": [{
+            "value": "avr",
+            "label": "AV Receiver"
+          },
+            {
+              "value": "speaker",
+              "label": "Speaker"
+            },
+            {
+              "value": "stb",
+              "label": "Set Top Box"
+            }
+          ]
         }
       ]
-   }
-  ]
+    }]
 }
