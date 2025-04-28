@@ -53,6 +53,16 @@ let CamillaDsp = function (logger) {
             if (run === false)
                 return;
 
+            // In case of error, cleanup the FIFO before starting, so it won't be
+            // kept in wait state and stall the whole pipeline
+            if (timeout > 0) {
+                try {
+                    execSync("/bin/dd if=/tmp/fusiondspfifo of=/dev/null bs=32k iflag=nonblock");
+                } catch (e) {
+                    // pass
+                }
+            }
+
             processSpawn();
 
         }, timeout);
@@ -91,19 +101,11 @@ let CamillaDsp = function (logger) {
             cdPathConfig
         ];
 
-        // Cleanup the FIFO before starting, so in case of error FIFO won't be
-        // kept in wait state, in case of no error the previous content is cleaned up
-        try {
-            execSync("/bin/dd if=/tmp/fusiondspfifo of=/dev/null bs=32k iflag=nonblock");
-        } catch (e) {
-            // pass
-        }
-
         logger.debug(`camilladsp spawning process`);
 
         camilla = spawn(cdPath, args);
 
-        logger.info(`camilladsp spawned new process with pid ${camilla.pid}, instance ${uniqueid}, run: ${run}`);
+      //  logger.info(`camilladsp spawned new process with pid ${camilla.pid}, instance ${uniqueid}, run: ${run}`);
 
         //camilla.on("exit", listenerExit);
         camilla.on("close", listenerClose);
