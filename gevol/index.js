@@ -30,11 +30,11 @@ gevol.prototype.onStart = function() {
 	var self = this;
 	var defer=libQ.defer();
 
-	self.startLiveLog();
+	//self.startLiveLog();
 
 	self.volume = {}; // Global Volume-object for exchanging data with Volumio
 	self.gevolStatus = {};
-	self.gevolStatus.volume = 30;
+	self.gevolStatus.volume = 0;
 
 	self.initVolumeSettings()
 	.then(function() {
@@ -46,7 +46,6 @@ gevol.prototype.onStart = function() {
 		self.logger.error('[GEVOL] onStart: FAILED to start plugin: ' + err);
 		defer.reject(err);
 	})
-
 
     return defer.promise;
 };
@@ -170,11 +169,11 @@ gevol.prototype.initVolumeSettings = function() {
 	};
 	volSettingsData.device = self.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'getConfigParam', 'outputdevice');
 	volSettingsData.name = self.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'getAlsaCards', '')[volSettingsData.device].name;
-	volSettingsData.devicename = 'softvolume'; //self.config.get('ampType');
-	volSettingsData.mixer = 'SoftMaster'; //self.config.get('ampType');
+	volSettingsData.devicename = '';
+	volSettingsData.mixer = '';
 	volSettingsData.maxvolume = this.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'getConfigParam', 'volumemax');
 	volSettingsData.volumecurve = '';
-	volSettingsData.volumesteps = 1; //self.config.get('volumeSteps');
+	volSettingsData.volumesteps = 1;
 	volSettingsData.currentmute = self.volume.mute;
 	self.commandRouter.volumioUpdateVolumeSettings(volSettingsData)
 	.then(resp => {
