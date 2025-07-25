@@ -1,6 +1,6 @@
 {
 	"name": "gevol",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "GEVOL control plugin",
 	"main": "index.js",
 	"scripts": {
@@ -11,9 +11,9 @@
 	"repository": "https://github.com/blamphos/volumio-plugins-sources.git",
 	"volumio_info": {
 		"prettyName": "GEVOL",
-		"icon": "fa-lightbulb-o",
-		"plugin_type": "audio_interface",
-		"has_alsa_contribution":false,
+		"icon": "fa-volume-up",
+		"plugin_type": "system_controller",
+		"has_alsa_contribution": false,
 		"architectures": [
 			"amd64",
 			"armhf",

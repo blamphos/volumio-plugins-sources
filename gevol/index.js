@@ -4,7 +4,7 @@ var libQ = require('kew');
 var fs=require('fs-extra');
 var config = new (require('v-conf'))();
 var exec = require('child_process').exec;
-var execSync = require('child_process').execSync;
+var spawn = require('child_process').spawn;
 
 module.exports = gevol;
 function gevol(context) {
@@ -24,18 +24,69 @@ gevol.prototype.onVolumioStart = function()
 	this.config.loadFile(configFile);
 
 	return libQ.resolve();
-}
+};
 
 gevol.prototype.onStart = function() {
-    var self = this;
+	var self = this;
 	var defer=libQ.defer();
 
-	this.commandRouter.addCallback('volumioupdatevolume', this.volumioupdatevolume.bind(this));
+	self.startLiveLog();
 
-	// Once the Plugin has successfull started resolve the promise
-	defer.resolve();
+	self.volume = {}; // Global Volume-object for exchanging data with Volumio
+	self.gevolStatus = {};
+	self.gevolStatus.volume = 30;
+
+	self.initVolumeSettings()
+	.then(function() {
+		// Once the Plugin has successfull started resolve the promise
+		self.logger.info('[GEVOL] onStart: successfully started plugin');
+		defer.resolve();
+    })
+    .fail(err => {
+		self.logger.error('[GEVOL] onStart: FAILED to start plugin: ' + err);
+		defer.reject(err);
+	})
+
 
     return defer.promise;
+};
+
+gevol.prototype.startLiveLog = function() {
+	var self = this;
+	
+	const format = 'cat'; // json is also an option for more serious logging/filtering
+	const args = ['--output', format, '-f'];
+	const defaults = {
+		cwd: undefined,
+		env: process.env
+	};
+	  
+	if (self.livelogchild) {
+	self.logger.info('[GEVOL] Killing previous livelog session');
+		self.livelogchild.kill();
+	}
+	self.livelogchild = spawn('/bin/journalctl',args, defaults);
+	  
+	self.livelogchild.stdout.on('data', (data) => {
+		var lines = data.toString().split('\n');
+		lines.forEach(function(line) {
+			if (line.includes("Volume Spotify")) {
+				const vol = Number.parseInt(line.split(" ").pop());
+				if (!Number.isNaN(vol)) {
+					self.logger.info('[GEVOL] Spotify Volume: ' + vol);
+					self.commandRouter.volumiosetvolume(vol);
+				}			
+			}
+		});
+	});
+
+	self.livelogchild.stderr.on('data', (data) => {
+	  self.logger.info(`stderr: ${data}`);
+	});
+
+	self.livelogchild.on('close', (code) => {
+	  self.logger.info(`[GEVOL] child process exited with code ${code}`);
+	}); 
 };
 
 gevol.prototype.onStop = function() {
@@ -99,16 +150,124 @@ gevol.prototype.setConf = function(varName, varValue) {
 
 // Application Methods -----------------------------------------------------------------------------
 
-gevol.prototype.volumioupdatevolume = function (volume) {
+// Update the volumio Volume Settings, mainly makes this an Override plugin
+gevol.prototype.updateVolumeSettings = function(data) {
 	var self = this;
-	self.logger.info('[GEVOL] update volume: ' + volume.vol); // + " muted: " + vol.muted);
-	const cmdStr = 'curl -X "POST" -d volume=' + volume.vol + ' 127.0.0.1:81';
-	//self.logger.info(cmdStr);
-	exec(cmdStr, {uid: 1000, gid: 1000}, function (error, stdout, stderr) {
-		if (error !== null) {
-                  self.logger.error('[GEVOL] volumioupdatevolume: Error: ' + cmdStr + ' ' + error);
-                } else {
-                  self.logger.info('[GEVOL] volumioupdatevolume: ' + stdout);
-                }
+    var defer = libQ.defer();
+
+    self.logger.info('[GEVOL] updateVolumeSettings: received ' + JSON.stringify(data));
+    return self.retrievevolume();
+};
+
+gevol.prototype.initVolumeSettings = function() {
+	var self = this;
+    var defer = libQ.defer();
+
+	var volSettingsData = {
+		'pluginType': 'system_controller',
+		'pluginName': 'gevol',
+		'volumeOverride': true
+	};
+	volSettingsData.device = self.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'getConfigParam', 'outputdevice');
+	volSettingsData.name = self.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'getAlsaCards', '')[volSettingsData.device].name;
+	volSettingsData.devicename = 'softvolume'; //self.config.get('ampType');
+	volSettingsData.mixer = 'SoftMaster'; //self.config.get('ampType');
+	volSettingsData.maxvolume = this.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'getConfigParam', 'volumemax');
+	volSettingsData.volumecurve = '';
+	volSettingsData.volumesteps = 1; //self.config.get('volumeSteps');
+	volSettingsData.currentmute = self.volume.mute;
+	self.commandRouter.volumioUpdateVolumeSettings(volSettingsData)
+	.then(resp => {
+		self.logger.info("[GEVOL] updateVolumeSettings: " + JSON.stringify(volSettingsData + ' ' + resp));
+		defer.resolve();
+	})
+	.fail(err => {
+		self.logger.error("[GEVOL] updateVolumeSettings: volumioUpdateVolumeSettings failed:" + err );
+		defer.reject(err)
+	})
+	return defer.promise;
+};
+
+// Override the alsavolume function to send volume commands to the amp
+gevol.prototype.alsavolume = function (VolumeInteger) {
+	var self = this;
+	var defer = libQ.defer();
+
+    self.logger.info('[GEVOL] alsavolume: Set volume "' + VolumeInteger + '"')
+
+	switch(VolumeInteger) {		
+		case 'mute':
+			break;
+		case 'unmute':
+			break;
+		case 'toggle':
+			break;
+		case '+':
+			self.updateVolumeImp(self.gevolStatus.volume + 1);
+			break;
+		case '-':
+			self.updateVolumeImp(self.gevolStatus.volume - 1);
+			break;
+		default:
+			self.updateVolumeImp(parseInt(VolumeInteger));
+			break;
+	};
+
+	defer.resolve(self.getVolumeObject());
+	return defer.promise;
+};
+
+gevol.prototype.updateVolumeImp = function (volume) {
+	var self = this;
+	
+	volume = Math.min(volume, 100);
+	volume = Math.max(volume, 0);
+
+	if (self.gevolStatus.volume != volume) {				
+		const cmdStr = 'curl -X "POST" -d volume=' + volume + ' 127.0.0.1:81';
+		//self.logger.info(cmdStr);
+		exec(cmdStr, {uid: 1000, gid: 1000}, function (error, stdout, stderr) {
+			if (error !== null) {
+				self.logger.error('[GEVOL] updateVolumeImp: Error: ' + cmdStr + ' ' + error);
+			} else {
+				self.logger.info('[GEVOL] updateVolumeImp returned: ' + stdout);					
+			}
+		});
+
+		self.logger.info('[GEVOL] updateVolumeImp: ' + self.gevolStatus.volume + ' -> ' + volume);
+		self.gevolStatus.volume = volume;
+	}	
+};
+
+// Returns the current settings in an object that volumio can use
+gevol.prototype.getVolumeObject = function() {
+	var volume = {};
+	var defer = libQ.defer();
+	var self = this;
+
+	volume.vol = self.gevolStatus.volume;
+	volume.vol = Math.min(100, volume.vol);
+	volume.vol = Math.max(0, volume.vol);
+
+	volume.mute = volume.vol == 0;
+	volume.disableVolumeControl = false;
+	self.logger.info('[GEVOL] getVolumeObject: ' + JSON.stringify(volume));
+	return libQ.resolve(volume)
+	.then(function (volume) {
+		defer.resolve(volume);
+		self.commandRouter.volumioupdatevolume(volume);
 	});
+	return volume;
+};
+
+gevol.prototype.volumioupdatevolume = function () {
+	var self = this;
+	self.logger.info('[GEVOL] volumioupdatevolume: ');
+	return self.commandRouter.volumioupdatevolume(self.getVolumeObject());
+};
+
+gevol.prototype.retrievevolume = function () {
+    var self = this;
+	self.logger.info('[GEVOL] retrieveVolume: ');
+    return self.getVolumeObject();
 };
