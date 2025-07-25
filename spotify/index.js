@@ -38,7 +38,7 @@ var isInVolatileMode = false;
 var ignoreStopEvent = false;
 
 // Volume limiter
-var deltaVolumeTreshold = 2;
+var deltaVolumeTreshold = 1;
 var volumeDebounce;
 
 
@@ -569,7 +569,7 @@ ControllerSpotify.prototype.setSpotifyDaemonVolume = function (volume) {
     volumeDebounce = setTimeout(() => {
         self.debugLog('SETTING SPOTIFY VOLUME ' + volume);
         self.sendSpotifyLocalApiCommandWithPayload('/player/volume', { volume: volume });
-    }, 1500);
+    }, 1000);
 };
 
 
