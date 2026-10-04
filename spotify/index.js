@@ -130,6 +130,12 @@ ControllerSpotify.prototype.getUIConfig = function () {
             var enableAutoplayValue = self.config.get('enable_autoplay', false);
             uiconf.sections[2].content[4].value = enableAutoplayValue;
 
+            var audioBufferTime = self.config.get('audio_buffer_time', 500_000);
+            uiconf.sections[2].content[5].value = audioBufferTime;
+
+            var audioPeriodCount = self.config.get('audio_period_count', 4);
+            uiconf.sections[2].content[6].value = audioPeriodCount;
+
             defer.resolve(uiconf);
         })
         .fail(function (error) {
@@ -189,7 +195,6 @@ ControllerSpotify.prototype.initializeWsConnection = function () {
     });
 
     ws.on('message', function message(data) {
-        self.debugLog('received: ' + data);
         self.parseEventState(JSON.parse(data));
     });
 
@@ -400,9 +405,6 @@ ControllerSpotify.prototype.libRespotGoUnsetVolatile = function () {
     var self = this;
     var defer = libQ.defer();
 
-    self.debugLog('UNSET VOLATILE');
-    self.debugLog(JSON.stringify(currentVolumioState))
-
     if (currentVolumioState && currentVolumioState.status && currentVolumioState.status !== 'stop') {
         self.logger.info('Setting Spotify stop after unset volatile call');
         setTimeout(()=>{
@@ -417,8 +419,6 @@ ControllerSpotify.prototype.libRespotGoUnsetVolatile = function () {
 ControllerSpotify.prototype.getState = function () {
     var self = this;
 
-    self.debugLog('GET STATE SPOTIFY');
-    self.debugLog(JSON.stringify(self.state));
     return self.state;
 };
 
@@ -427,8 +427,6 @@ ControllerSpotify.prototype.pushState = function (state) {
     var self = this;
 
     self.state.bitrate = self.getCurrentBitrate();
-    self.debugLog('PUSH STATE SPOTIFY');
-    self.debugLog(JSON.stringify(self.state));
     self.seekTimerAction();
     return self.commandRouter.servicePushState(self.state, 'spop');
 };
@@ -460,8 +458,6 @@ ControllerSpotify.prototype.sendSpotifyLocalApiCommandWithPayload = function (co
 ControllerSpotify.prototype.pause = function () {
     this.logger.info('Spotify Received pause');
 
-    this.debugLog('SPOTIFY PAUSE');
-    this.debugLog(JSON.stringify(currentVolumioState))
     this.sendSpotifyLocalApiCommand('/player/pause');
 };
 
@@ -480,8 +476,6 @@ ControllerSpotify.prototype.stop = function () {
     this.logger.info('Spotify Stop');
     var defer = libQ.defer();
 
-    this.debugLog('SPOTIFY STOP');
-    this.debugLog(JSON.stringify(currentVolumioState))
     if (!ignoreStopEvent) {
         this.sendSpotifyLocalApiCommand('/player/pause');
     }
@@ -537,20 +531,17 @@ ControllerSpotify.prototype.repeat = function (value, repeatSingle) {
 ControllerSpotify.prototype.onSpotifyVolumeChange = function (volume) {
     var self = this;
 
-    self.debugLog('RECEIVED SPOTIFY VOLUME ' + volume);
     if (volume !== currentVolumioVolume) {
         self.logger.info('Setting Volumio Volume from Spotify: ' + volume);
         currentSpotifyVolume = volume;
         currentVolumioVolume = currentSpotifyVolume;
         self.commandRouter.volumiosetvolume(currentVolumioVolume);
     }
-
 };
 
 ControllerSpotify.prototype.onVolumioVolumeChange = function (volume) {
     var self = this;
 
-    self.debugLog('RECEIVED VOLUMIO VOLUME ' + volume);
     if (volume !== currentSpotifyVolume && self.checkSpotifyAndVolumioDeltaVolumeIsEnough(currentSpotifyVolume, volume)) {
         self.logger.info('Setting Spotify Volume from Volumio: ' + volume);
         currentVolumioVolume = volume;
@@ -567,7 +558,6 @@ ControllerSpotify.prototype.setSpotifyDaemonVolume = function (volume) {
         clearTimeout(volumeDebounce);
     }
     volumeDebounce = setTimeout(() => {
-        self.debugLog('SETTING SPOTIFY VOLUME ' + volume);
         self.sendSpotifyLocalApiCommandWithPayload('/player/volume', { volume: volume });
     }, 1000);
 };
@@ -576,14 +566,11 @@ ControllerSpotify.prototype.setSpotifyDaemonVolume = function (volume) {
 ControllerSpotify.prototype.checkSpotifyAndVolumioDeltaVolumeIsEnough = function (spotifyVolume, volumioVolume) {
     var self = this;
 
-    self.debugLog('SPOTIFY VOLUME ' + spotifyVolume);
-    self.debugLog('VOLUMIO VOLUME ' + volumioVolume);
     if (spotifyVolume === undefined) {
         return self.alignSpotifyVolumeToVolumioVolume();
     }
     try {
         var isDeltaVolumeEnough = Math.abs(parseInt(spotifyVolume) - parseInt(volumioVolume)) >= deltaVolumeTreshold;
-        self.debugLog('DELTA VOLUME ENOUGH: ' + isDeltaVolumeEnough);
         return isDeltaVolumeEnough;
     } catch(e) {
         return false;
@@ -743,13 +730,17 @@ ControllerSpotify.prototype.createConfigFile = function () {
     }
     var normalisationPregain = self.config.get('normalisation_pregain', '1.0');
     var enableAutoplay = self.config.get('enable_autoplay', false);
+    var audioBufferTime = self.config.get('audio_buffer_time', 500_000);
+    var audioPeriodCount = self.config.get('audio_period_count', 4);
 
     var conf = template.replace('${device_name}', devicename)
         .replace('${bitrate_number}', selectedBitrate)
         .replace('${device_type}', icon)
         .replace('${external_volume}', externalVolume)
         .replace('${normalisation_pregain}', normalisationPregain)
-        .replace('${disable_autoplay}', !enableAutoplay);
+        .replace('${disable_autoplay}', !enableAutoplay)
+        .replace('${audio_buffer_time}', audioBufferTime)
+        .replace('${audio_period_count}', audioPeriodCount);
 
     var credentials_type = self.config.get('credentials_type', 'zeroconf');
     var logged_user_id = self.config.get('logged_user_id', '');
@@ -820,6 +811,16 @@ ControllerSpotify.prototype.saveGoLibrespotSettings = function (data, avoidBroad
         self.config.set('normalisation_pregain', data.normalisation_pregain.value);
     }
 
+    var audioBufferTime = parseInt(data.audio_buffer_time);
+    if (audioBufferTime) {
+        self.config.set('audio_buffer_time', audioBufferTime.toString());
+    }
+
+    var audioPeriodCount = parseInt(data.audio_period_count);
+    if (audioPeriodCount) {
+        self.config.set('audio_period_count', audioPeriodCount.toString());
+    }
+
     self.config.set('enable_autoplay', data.enable_autoplay);
 
     self.selectedBitrate = self.config.get('bitrate_number', '320').toString();
@@ -865,13 +866,10 @@ ControllerSpotify.prototype.spotifyClientCredentialsGrant = function () {
         self.refreshAccessToken()
             .then(function (data) {
                 self.spotifyAccessToken = data.body['accessToken'];
-                self.debugLog('------------------------------------------------------ ACCESS TOKEN ------------------------------------------------------');
-                self.debugLog(self.spotifyAccessToken);
-                self.debugLog('------------------------------------------------------ ACCESS TOKEN ------------------------------------------------------');
                 self.config.set('access_token', self.spotifyAccessToken);
                 self.spotifyApi.setAccessToken(self.spotifyAccessToken);
                 self.spotifyAccessTokenExpiration = data.body['expiresInSeconds'] * 1000 + now;
-                self.logger.info('New Spotify access token = ' + self.spotifyAccessToken);
+                self.logger.info('New Spotify access token' + self.spotifyAccessToken.substring(0, 10) + '...');
                 defer.resolve();
             }, function (err) {
                 self.logger.info('Spotify credentials grant failed with ' + err);
@@ -1026,7 +1024,6 @@ ControllerSpotify.prototype.spotifyCheckAccessToken = function () {
                 self.spotifyAccessToken = data.body.accessToken;
                 self.spotifyApi.setAccessToken(data.body.accessToken);
                 self.spotifyAccessTokenExpiration = data.body.expiresInSeconds * 1000 + now;
-                self.logger.info('New access token = ' + self.spotifyAccessToken);
                 defer.resolve();
             });
     } else {
@@ -1059,7 +1056,6 @@ ControllerSpotify.prototype.getUserInformations = function () {
     self.spotifyApi.getMe()
         .then(function(data) {
             if (data && data.body) {
-                self.debugLog('User informations: ' + JSON.stringify(data.body));
                 self.loggedInUserId = data.body.id;
                 self.userCountry = data.body.country || 'US';
                 self.config.set('logged_user_id', self.loggedInUserId);
@@ -2540,7 +2536,6 @@ ControllerSpotify.prototype.getTrack = function (id) {
                     trackType: 'spotify'
                 };
                 response.push(item);
-                this.debugLog('GET TRACK: ' + JSON.stringify(response));
                 defer.resolve(response);
             })
             .catch((e) => {
@@ -2799,14 +2794,6 @@ ControllerSpotify.prototype.goto = function (data) {
 
 // PLUGIN FUNCTIONS
 
-ControllerSpotify.prototype.debugLog = function (stringToLog) {
-    var self = this;
-
-    if (isDebugMode) {
-        console.log('SPOTIFY: ' + stringToLog);
-    }
-};
-
 ControllerSpotify.prototype.isTrackAvailableInCountry = function (currentTrackObj) {
     var self = this;
 
@@ -2823,8 +2810,6 @@ ControllerSpotify.prototype.isTrackAvailableInCountry = function (currentTrackOb
 
 ControllerSpotify.prototype.explodeUri = function (uri) {
     var self = this;
-
-    self.debugLog('EXPLODING URI:' + uri);
 
     var defer = libQ.defer();
 
